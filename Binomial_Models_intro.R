@@ -95,7 +95,7 @@ abline(v = 0, lwd = 3, col = "red")
 
 ################################################################################
 #  Binomial ANCOVA
-#   Adds discrete and continuous covariates (explanatory variables )to the linear predictor 
+#   Adds discrete and continuous covariates (explanatory variables) to the linear predictor 
 #   of a binomial GLM (binomial response variable)
 #   1. Statistical Distribution: C[i] ~ Binomial ( p[i], N[i])
 #   2. Link function: logit --- logit(p[i]) = log(p[i]/(1-p[i]))

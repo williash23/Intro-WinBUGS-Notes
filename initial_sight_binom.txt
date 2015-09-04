@@ -1,0 +1,22 @@
+
+      model{
+   
+#  Priors
+ for (i in 1:n){
+    alpha[i] ~ dnorm(0, 0.01)
+    beta[i] ~ dnorm(0, 0.01)
+ }  
+
+#  Likelihood
+ for (i in 1:n) {
+    C[i] ~ dbin(phi[i], N) 
+    logit(phi[i]) <- alpha + beta * mode[i]
+ }
+
+ # Derived quantities
+ occ.transit <- exp(alpha) / (1 + exp(alpha))
+ occ.station <- exp(alpha + beta) / (1 + exp(alpha + beta))
+ occ.diff <- occ.transit - occ.station# Test quantity
+
+ }
+ 
