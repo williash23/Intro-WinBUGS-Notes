@@ -1,0 +1,60 @@
+  model {
+    # priors
+    b0.phi ~ dnorm( 0, 0.001 )T(-10,10)
+    b0.p ~ dnorm( 0, 0.001 )T(-10,10)
+
+    # We played around with changing priors and seeing what happens
+#    b0.phi ~ dunif(-10, 10)
+#    b0.p ~ dunif(-10, 10)
+
+#    b0.phi ~ dnorm(-3, 10)
+#    b0.p ~ dnorm(-3, 10)
+    
+    # Transform parameters to 0-1 scale
+    logit(mean.phi) <- b0.phi
+    logit(mean.p) <- b0.p
+    
+    # Here we have to get everything into [i, j] indexing so it will fit into
+    #   the likelihood below
+    # phi[1, 1] is phi1 for indiv 1
+    # p[1, 1] is p2 for indiv 1
+    
+    for( i in 1:nind ){
+      for( t in f[i]:(nocc-1) ){
+        phi[i, t] <- mean.phi
+        p[i, t] <- mean.p
+      }  
+    } 
+    
+    # likelihood
+    # This is written with [i, j] indexing (the most general (?)) 
+    #    so we don't ever have to change this part in other models
+    # z[t] is the true state of the animal (alive or dead) at time t 
+    ### Is this an extra column wide? 
+    # phi[t] is survival probability between time t and t+1
+    # mu1 is phi | z (surv pr given alive or dead)
+    # p[t] is capture probability at time t+1
+    # mu2 is p | z (capture pr given alive or dead)
+    # f[i] is the initial capture occasion of indiv. i
+
+    for( i in 1:nind ){
+    
+      # On the first occasion (capture) the animal is definitely alive
+      # (NA before that because of our initial value)
+      z[i, f[i]] <- 1
+    
+      # For every occasion after that...
+      for( t in (f[i] + 1):nocc ){
+      
+        # State process
+        mu1[i, t] <- phi[i, t-1] * z[i, t-1]
+        z[i, t] ~ dbern(mu1[i, t])
+
+        # Observation process
+        mu2[i, t] <- p[i, t-1] * z[i, t]
+        y[i, t] ~ dbern(mu2[i, t])
+
+      } # i
+    } # t
+  
+  } # model

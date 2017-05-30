@@ -1,0 +1,13 @@
+model{  
+#  Priors 
+ alpha ~ dnorm(0, 0.001)
+ beta ~ dnorm(0, 0.001)
+ sigma ~ dunif(0, 100)
+
+# Likelihood
+    y ~ dnorm(mu, tau)
+    mu <- alpha + beta*x
+
+ # Derived quantities
+ tau <- 1/ (sigma * sigma)
+ }

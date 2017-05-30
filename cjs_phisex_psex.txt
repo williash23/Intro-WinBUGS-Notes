@@ -1,0 +1,38 @@
+  model {
+    # priors
+    b0.phi ~ dnorm( 0, 0.001 )T(-10,10)
+    b1.phi ~ dnorm( 0, 0.001 )T(-10,10)
+    b0.p ~ dnorm( 0, 0.001 )T(-10,10)
+    b1.p ~ dnorm( 0, 0.001 )T(-10,10)
+    
+    # Transform parameters
+    for( i in 1:nind ){
+      logit(mean.phi[i]) <- b0.phi + b1.phi * male[i]
+      logit(mean.p[i]) <- b0.p + b1.p * male[i]
+    }
+    
+    # Put it all in [i, j] indexing
+    for( i in 1:nind ){
+      for( t in f[i]:(nocc-1) ){
+        phi[i, t] <- mean.phi[i]
+        p[i, t] <- mean.p[i]
+      }
+    }
+    
+    # likelihood 
+    ### Don't need to change anything in here, because it's already written by time
+    for( i in 1:nind ){
+      z[i, f[i]] <- 1
+      for( t in (f[i] + 1):nocc ){
+      
+        # state
+        z[i,t] ~ dbern( mu1[i,t] )
+        mu1[i,t] <- phi[i, t-1] * z[i,t-1]
+      
+        # observation
+        y[i,t] ~ dbern( mu2[i,t] )
+        mu2[i,t] <- p[i,t-1] * z[i,t]
+      }
+    }
+  
+  }
