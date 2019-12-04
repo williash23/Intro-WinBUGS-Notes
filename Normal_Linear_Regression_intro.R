@@ -1,35 +1,331 @@
-#  Normal Linear Regression - introduction and code (Chapter 8)
-#  Kery - Introduction to WinBUGS for Ecologists (2010)
-#  8/11/2015
+#  Using data simulation to to look at effect size and sample size impacts on being able to 
+#   detect an impact of covariate 
+#   i.e., if the effect of the covariate is X in truth, how large of sample size do we need to be
+#   able to detect it? How does variance change this?
+#  Adapated from Kery and Schaub 2010.
 ################################################################################
 
-#  Load packages and set up BUGS directories
+# =============================================================================
+#  Load packages
+# =============================================================================
+
 library("R2WinBUGS")
 library("lme4")
 bd <- "C:/Program Files/WinBUGS14/"		
-working.directory = getwd()
-bugs.directory = bd
 
-#  Remember the simple linear regression model algebraic description
-#   y[i] = α + β * x[i] + ε[i]
-#   The linear model described here is different than the one described for the t-test
-#   because here x (the explanatory variable) can be continuous (i.e., it doesn't have to have 
-#   a binary categorical value)
+
+	#  Remember the simple linear regression model algebraic description
+	#   y[i] = α + β * x[i] + ε[i]
+
+
+
+# =============================================================================
+#  Simulate a data set with a covariate. These are values that we would know from out data
+#  collection process. Example question: does length have an impact on mass of adults?
+# =============================================================================
+	
+	# ----------------------
+	#  Number of habitats
+	n_hab <- 2
+	
+	# ----------------------
+	#  Number of sample units (individuals) per habitat
+	n_samp <- 20
+	
+	# ----------------------
+	#  Total number of data points
+	n <- n_hab * n_samp		
+	
+	# ----------------------
+	# Assign individuals (1 to n_samp) to habitats
+	x <- rep(1:n_hab, rep(n_samp, n_hab))
+	
+	# ----------------------
+	# Generate length values using a uniform distribution
+	length <- runif(n, 45, 70)
+
+	# ----------------------
+	# Center and scale covariate
+	length_sc <- as.numeric(scale(length, center = TRUE))
+
+	
+	
+# =============================================================================
+#  Simulate "Truth". We would not know these values but we are setting up a "truth" situation
+#   so that we can compare impacts of sample size, effect size, and variance.
+# =============================================================================
+	
+	# ----------------------
+	# Effect size of covariate mass (our explanatory variable)
+	beta_val <- 2
+	
+	# ----------------------
+	#  Intercept (starting point) for mass (our response variable)
+	int <- 1
+	
+	# ----------------------
+	#  Random variation in mass (our response variable)
+	eps <- rnorm(n = n, mean = 0, sd = 10)
+	
+	# ----------------------
+	#  Make a holder for generated observations
+	mass <- matrix(nrow = n, ncol = 1)
+	
+	# ----------------------
+	#  Generate our measured mass (response variable) using our known effect of covariate
+	#   and random variation
+	for(j in 1:n){
+		mass[j] <- int + beta_val*length[j] + eps[j]
+		}
+	
+
+	
+	
+# =============================================================================
+#  Set up model in WinBUGS language.
+# =============================================================================
+	
+	# ----------------------
+	#  Define model
+	sink("lm.txt")
+	cat("
+	model {
+
+	# ----------------------
+	# Set up uninformative priors
+	 for (i in 1:n_hab){
+		
+		# ----------------------
+		# Intercept
+		alpha[i] ~ dnorm(0, 0.001)	
+
+		# ----------------------
+		# Effect of covariate
+		beta[i] ~ dnorm(0, 0.001)	
+		
+		}
+	 
+		# ----------------------
+		# Residual variance
+		sigma ~ dunif(0, 100)			
+		tau <- 1 / ( sigma * sigma)
+
+	# ----------------------
+	# Specific likelihood (linear predictor)
+	 for (i in 1:n) {
+	
+		# ----------------------
+		# Distribution from which observations occur
+		mass[i] ~ dnorm(mu[i], tau)
+		
+		# ----------------------
+		# Linear predictor of how the covariate impacts 
+		#   the observations from the distribution
+		mu[i] <- alpha[] + beta[length_sc[i]]
+		
+		}
+
+	# ----------------------
+	#  Derived quantities; defining effects relative to baseline level
+	 a_effe2 <- alpha[2] - alpha[1]		
+	 a_effe3 <- alpha[3] - alpha[1]		
+	 b_effe2 <- beta[2] - beta[1]		
+	 b_effe3 <- beta[3] - beta[1]		
+
+	# ----------------------
+	# Custom tests
+	 test1 <- beta[3] - beta[2]		
+	 
+	}
+	",fill=TRUE)
+	sink()
+
+
+
+# =============================================================================
+#  Run model
+# =============================================================================
+	
+	# ----------------------
+	# Bundle data
+win.data <- list(mass = as.numeric(mass), pop = as.numeric(pop),
+length = length, n.group = max(as.numeric(pop)), n = n)
+
+#   Inits function
+inits <- function(){ list(alpha = rnorm(n.groups, 0, 2),
+beta = rnorm(n.groups, 1, 1), sigma = rlnorm(1))}
+
+#   Parameters to estimate
+parameters <- c("alpha", "beta", "sigma", "a.effe2", "a.effe3",
+"b.effe2", "b.effe3", "test1")
+
+#   MCMC settings
+ni <- 1200
+nb <- 200
+nt <- 2
+nc <- 3
+
+#   Start Markov chains
+out <- bugs(win.data, inits, parameters, "lm.txt", n.thin=nt,
+n.chains=nc, n.burnin=nb, n.iter=ni, debug = TRUE)
+
+print(out, dig = 3)			# Bayesian analysis
+beta.vec				# Truth in the data-generating process
+summary(lm(mass ~ pop * length))	# The ML solution again
+
+#   Note here: length covariate IS centered and scaled so estimates are  good
+#   Data passed to WinBUGS
+win.data <- list(mass = as.numeric(mass), pop = as.numeric(pop),
+length = as.numeric(scale(length)), n.group = max(as.numeric(pop)), n = n)
+
+#   Start Markov chains
+out <- bugs(win.data, inits, parameters, "lm.txt", n.thin=nt,
+n.chains=nc, n.burnin=nb, n.iter=ni, debug = FALSE)
+
+#  Inspect results
+print(out, dig = 3)	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+# =============================================================================
+#  Simulate a data set with a covariate.
+#   Our question: does length have an impact on mass of adults?
+# =============================================================================
+	
+	# ----------------------
+	#  Number of habitats
+	n_hab <- 2
+	
+	# ----------------------
+	#  Number of sample units (individuals) per habitat
+	n_samp <- 20
+	
+	# ----------------------
+	#  Total number of data points
+	n <- n_hab * n_samp		
+	
+	# ----------------------
+	# Assign individuals (1 to n_samp) to habitats
+	x <- rep(1:n_hab, rep(n_samp, n_hab))
+	
+	# ----------------------
+	# Name habitats so they're easy to see
+	#pop <- factor(x, labels = c("Urban", "Forest"))
+	
+	# ----------------------
+	# Generate length values using a uniform distribution
+	length <- runif(n, 45, 70)		
+
+
+# =============================================================================
+#  Set up model in WinBUGS language.
+# =============================================================================
+	
+	# ----------------------
+	#  Define model
+	sink("lm.txt")
+	cat("
+	model {
+
+	# ----------------------
+	# Set up uninformative priors
+	 for (i in 1:n_hab){
+		
+		# ----------------------
+		# Intercept
+		alpha[i] ~ dnorm(0, 0.001)	
+
+		# ----------------------
+		# Effect of covariate
+		beta[i] ~ dnorm(0, 0.001)	
+		
+		}
+	 
+		# ----------------------
+		# Residual variance
+		sigma ~ dunif(0, 100)			
+		tau <- 1 / ( sigma * sigma)
+
+	# ----------------------
+	# Specific likelihood (linear predictor)
+	 for (i in 1:n) {
+	
+		# ----------------------
+		# Distribution from which observations occur
+		mass[i] ~ dnorm(mu[i], tau)
+		
+		# ----------------------
+		# Linear predictor of how the covariate impacts 
+		#   the observations from the distribution
+		mu[i] <- alpha[pop[i]] + beta[pop[i]]* length[i]
+		
+		}
+
+	# ----------------------
+	#  Derived quantities; defining effects relative to baseline level
+	 a_effe2 <- alpha[2] - alpha[1]		
+	 a_effe3 <- alpha[3] - alpha[1]		
+	 b_effe2 <- beta[2] - beta[1]		
+	 b_effe3 <- beta[3] - beta[1]		
+
+	# ----------------------
+	# Custom tests
+	 test1 <- beta[3] - beta[2]		
+	 
+	}
+	",fill=TRUE)
+	sink()
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 
 #  Pretend/easy data set generation for birds
-n <- 16							# Number of years
-a = 40							# Intercept
-b = -1.5							# Slope
-sigma2 = 25				# Residual variance
+
+#  Sample Size
+n <- 
+
+#  Covariate values
+
 
 x <- 1:16 						# Values of covariate year
 eps <- rnorm(n, mean = 0, sd = sqrt(sigma2))
 y <- a + b*x + eps		# Assemble data set
-plot((x+1989), y, xlab = "Year", las = 1, ylab = "Prop. occupied (%)", cex = 1.2)
 
-#  Analysis using R for frequentist approach
-print(summary(lm(y ~ I(x+1989))))
-abline(lm(y~ I(x+1989)), col = "blue", lwd = 2)
+
+
+
+
+
+
+
+
 
 #  Analysis using WinBUGS (and R2WinBUGS) for Bayesian approach
 #   Define BUGS model
@@ -48,10 +344,17 @@ model {
     mu[i] <- alpha + beta*x[i]
  }
 
+ 
 # Derived quantities
  tau <- 1/ (sigma * sigma)
  p.decline <- 1-step(beta)		# Probability of decline
 
+ 
+ 
+ 
+ 
+ 
+ 
 # Assess model fit using a sums-of-squares-type discrepancy
  for (i in 1:n) {
     residual[i] <- y[i]-mu[i]		# Residuals for observed data
@@ -70,24 +373,49 @@ model {
 ",fill=TRUE)
 sink()
 
+
+
+
 #   Bundle data
 win.data <- list("x","y", "n")
 
+
+
+
 #   Inits function
 inits <- function(){ list(alpha=rnorm(1), beta=rnorm(1), sigma = rlnorm(1))}
+
+
+
 
 #   Parameters to estimate
 params <- c("alpha","beta", "p.decline", "sigma", "fit", "fit.new", "bpvalue", "residual", 
 					 "predicted")
 
+
+					 
 #  MCMC settings
 nc = 3  ;  ni=1200  ;  nb=200  ;  nt=1
+
+
+
+
+
 
 #  Start Gibbs sampler
 out <- bugs(data = win.data, inits = inits, parameters = params, model = "linreg.txt",
 n.thin = nt, n.chains = nc, n.burnin = nb, n.iter = ni, debug = TRUE)
 
 print(out, dig = 3)
+
+
+
+
+
+
+
+
+
 
 #  Goodness-of-Fit assessment in Bayesian analyses
 
